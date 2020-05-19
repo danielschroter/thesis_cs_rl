@@ -17,6 +17,23 @@ def transform_obs(x: dict):
 def state_dict_to_array(states):
     """
     transform dict of observations (current step and previous steps) to an array
+    The returned state is an 3 dim array:
+    For each agent, there are the observations (state variables) of the last observed states.
+    The state variables are defined in transform_obs.
+
+    Example:
+    [[[12,16,4,4]],
+    [[12,16,4,4]]
+    [[12,16,4,4]]
+    [[12,16,4,4]]]
+
+    The state of each agent consist only out of 1 observation (current):
+    Each observation is defined according to tranform_obs:
+    1. inventory balance
+    2. on_order items
+    3. arriving_order
+    4. arriving_shipments
+
     :param state_dict:
     :rtype: np.array
     """

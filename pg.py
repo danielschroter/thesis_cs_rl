@@ -20,7 +20,7 @@ def mlp(sizes, activation=nn.Tanh, output_activation=nn.Identity):
 def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch_size = 5000, render=False):
     agent = 1
 
-    env = BeerGame("classical", n_observed_periods=5, n_turns_per_game=40)
+    env = BeerGame("classical", n_observed_periods=1, n_turns_per_game=20)
     start_state = env.reset()
     env.render()
     done = False
@@ -57,7 +57,6 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
         batch_acts = []
         batch_weights = []
         batch_rets = []
-        batch_lens = []
 
         # reset episode specific variables
         obs_total = env.reset()
@@ -91,10 +90,8 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
             if done:
                 #ep_ret, ep_len = sum(ep_rews), len(ep_rews)
                 ep_ret = sum([sum(elem) for elem in ep_rews_total])
-                ep_len = len(ep_rews_total)
 
                 batch_rets.append(ep_ret)
-                batch_lens.append(ep_len)
                 feedback = calculate_feedback(ep_rews_total, agent, 10)
 
                 # batch_weights += [ep_ret]*ep_len
@@ -115,36 +112,39 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
 
         batch_loss.backward()
         optimizer.step()
-        return batch_loss, batch_rets, batch_lens, batch_acts
+        return batch_loss, batch_rets, batch_acts
 
     # training loop
 
     action_means = []
     return_means =[]
+
+    # Create Plots
+    plt.ion()
+    f = plt.figure(0)
+    ax1 = f.add_subplot(2,1,1)
+    ax2 = f.add_subplot(2,1,2)
+    ax1.set_xlabel("epoch")
+    ax1.set_ylabel("Mean Orders in epoch")
+    ax2.set_xlabel("epoch")
+    ax2.set_ylabel("Mean Cost in epoch")
+
     for i in range(epochs):
-        batch_loss, batch_rets, batch_lens, batch_acts = train_one_epoch()
+        batch_loss, batch_rets, batch_acts = train_one_epoch()
         action_means.append(sum(batch_acts)/len(batch_acts))
         return_means.append(sum(batch_rets)/len(batch_rets))
 
         df_1 = pd.Series(action_means)
         df_2 = pd.Series(return_means)
-        f = plt.figure(1)
-        plt.plot(df_1)
-        plt.xlabel("epoch")
-        plt.ylabel("Mean of ordered Items in epoch")
 
-        """
-        g = plt.figure(2)
-        plt.plot(df_2)
-        plt.xlabel("epoch")
-        plt.ylabel("Mean of Total Cost in epoch")
-        """
-
-        plt.pause(0.001)
+        ax1.plot(df_1)
+        ax2.plot(df_2)
+        plt.pause(0.0001)
 
         print('epoch: %3d \t loss: %.3f \t return: %.3f'%
               (i, batch_loss, np.mean(batch_rets)))
     f.show()
+
 
 
 if __name__ == "__main__":

@@ -74,7 +74,7 @@ class BeerGame(gym.Env):
         self.n_observed_periods = n_observed_periods
 
 
-        if self.demand_dist not in ['classical', 'uniform_0_2', 'normal_10_4', 'test']:
+        if self.demand_dist not in ['classical', 'uniform_0_2', 'uniform_0_8', 'normal_10_4', 'test']:
             raise NotImplementedError("env_type must be in ['classical', 'uniform_0_2', 'normal_10_4', 'test']")
 
         """
@@ -222,6 +222,7 @@ class BeerGame(gym.Env):
         print('Arriving_shipments:  ', ", ".join([str(x) for x in self.arriving_shipments]))
         print('Cum holding cost:  ', self.cum_holding_cost)
         print('Cum stockout cost: ', self.cum_stockout_cost)
+        print('Total Cost: ', self.cum_stockout_cost+self.cum_holding_cost)
         print('Last holding cost: ', self.holding_cost)
         print('Last stockout cost:', self.stockout_cost)
 
@@ -234,7 +235,7 @@ class BeerGame(gym.Env):
         if any(np.array(action) < 0):
             raise error.InvalidAction(f"You can't order negative amount. You agents actions are: {action}")
 
-        # Make incoming step
+        # Make incoming step (See Sterman 1989)
 
         # 1. Learn demand (inbound quantity) = self.arriving_orders
 
@@ -262,7 +263,11 @@ class BeerGame(gym.Env):
             self.orders[i].popleft()
             self.shipments[i].popleft()
 
-        # Calculate cost
+        #Reset & Calculate cost
+
+        self.holding_cost = np.zeros(self.n_agents, dtype=np.float)
+        self.stockout_cost = np.zeros(self.n_agents, dtype=np.float)
+
         for i in range(self.n_agents):
             if self.inventory_levels[i] >= 0:
                 self.holding_cost[i] = self.inventory_levels[i] * self.cost_weights[0][i]

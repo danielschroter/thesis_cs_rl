@@ -6,17 +6,19 @@ import gym
 from gym.spaces import Discrete, Box
 import numpy as np
 from bg_env import BeerGame
-from action_policies import get_other_actions, calculate_feedback
+from action_policies import AgentSimulator
+from action_policies import calculate_feedback
 import pandas as pd
 import matplotlib.pyplot as plt
 
 global logits_net
 
+
 def mlp(sizes, activation=nn.Tanh, output_activation=nn.Identity):
     layers = []
-    for j in range(len(sizes)-1):
-        act = activation if j < len(sizes)-2 else output_activation
-        layers += [nn.Linear(sizes[j], sizes[j+1], act())]
+    for j in range(len(sizes) - 1):
+        act = activation if j < len(sizes) - 2 else output_activation
+        layers += [nn.Linear(sizes[j], sizes[j + 1], act())]
     return nn.Sequential(*layers)
 
 
@@ -36,12 +38,13 @@ def compute_loss(obs, act, weights):
     return -(logp * weights).mean()
 
 
-def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch_size = 5000,
-          render=False,continuation=False, PATH=None, n_observed_periods=1):
+def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch_size=5000,
+          render=False, continuation=False, PATH=None, n_observed_periods=1):
     agent = 1
     action_means = []
-    return_means =[]
+    return_means = []
     epoch = 0
+    agent_sim = AgentSimulator()
 
     env = BeerGame("classical", n_observed_periods=n_observed_periods, n_turns_per_game=20)
     start_state = env.reset()
@@ -53,15 +56,15 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
     global logits_net
     logits_net = mlp(sizes=[obs_dim] + hidden_sizes + [n_acts])
 
-    #make optimizer
-    optimizer = Adam(logits_net.parameters(), lr = lr)
+    # make optimizer
+    optimizer = Adam(logits_net.parameters(), lr=lr)
 
     if continuation:
-        checkpoint=torch.load(PATH)
+        checkpoint = torch.load(PATH)
         logits_net.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         epoch = checkpoint['epoch']
-        loss=checkpoint['loss']
+        loss = checkpoint['loss']
         action_means = checkpoint['action_means']
         return_means = checkpoint['return_means']
         logits_net.train()
@@ -83,20 +86,21 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
         ep_rews = []
         ep_rews_total = []
 
-        #render first episode of each epoch
+        # render first episode of each epoch
         finished_rendering_this_epoch = False
 
-        #collect experience by acting in the environment with current policy
+        # collect experience by acting in the environment with current policy
         while True:
             # rendering
-            if(not finished_rendering_this_epoch) and render:
+            if (not finished_rendering_this_epoch) and render:
                 env.render()
 
             batch_obs.append(obs.copy())
 
-            #act in environment
+            # act in environment
             act = get_action(torch.as_tensor(obs, dtype=torch.float32))
-            actions = get_other_actions("base_stock", obs_total, env.demand_dist, env.turn)
+            actions = agent_sim.get_other_actions("sterman", obs_total, env.demand_dist, env.turn, env.orders,
+                                                  env.demands, env.shipments)
             actions[agent] = act
             obs_total, rew_total, done, _ = env.step(actions)
             obs, rew = obs_total[agent].flatten(), rew_total[agent]
@@ -106,7 +110,7 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
             ep_rews_total.append(rew_total)
 
             if done:
-                #ep_ret, ep_len = sum(ep_rews), len(ep_rews)
+                # ep_ret, ep_len = sum(ep_rews), len(ep_rews)
                 ep_ret = sum([sum(elem) for elem in ep_rews_total])
 
                 batch_rets.append(ep_ret)
@@ -115,7 +119,8 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
                 # batch_weights += [ep_ret]*ep_len
                 batch_weights += feedback
 
-                obs_total, done, ep_rews, ep_rews_total = env.reset(), False, [], []
+                obs_total, done, ep_rews, ep_rews_total = env.reset(), False, [], [],
+                agent_sim.reset()
                 obs = obs_total[agent].flatten()
                 finished_rendering_this_epoch = True
 
@@ -134,12 +139,11 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
 
     # training loop
 
-
     # Create Plots
     plt.ion()
     f = plt.figure(0)
-    ax1 = f.add_subplot(2,1,1)
-    ax2 = f.add_subplot(2,1,2)
+    ax1 = f.add_subplot(2, 1, 1)
+    ax2 = f.add_subplot(2, 1, 2)
     ax1.set_xlabel("epoch")
     ax1.set_ylabel("Mean Orders in epoch")
     ax2.set_xlabel("epoch")
@@ -147,21 +151,21 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
 
     for i in range(epoch, epochs):
         batch_loss, batch_rets, batch_acts = train_one_epoch()
-        action_means.append(sum(batch_acts)/len(batch_acts))
-        return_means.append(sum(batch_rets)/len(batch_rets))
+        action_means.append(sum(batch_acts) / len(batch_acts))
+        return_means.append(sum(batch_rets) / len(batch_rets))
 
-        df_1 = pd.series(action_means)
-        df_2 = pd.series(return_means)
+        df_1 = pd.Series(action_means)
+        df_2 = pd.Series(return_means)
 
         ax1.plot(df_1)
         ax2.plot(df_2)
         plt.pause(0.0001)
 
-        print('epoch: %3d \t loss: %.3f \t return: %.3f'%
+        print('epoch: %3d \t loss: %.3f \t return: %.3f' %
               (i, batch_loss, np.mean(batch_rets)))
 
-        if (i+1) % 10 == 0:
-            PATH = "checkpoint.pt"
+        if (i + 1) % 10 == 0:
+            #PATH = "checkpoint.pt"
             torch.save({
                 'epoch': i,
                 'model_state_dict': logits_net.state_dict(),
@@ -174,12 +178,12 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
     f.show()
 
 
-def evaluate(PATH, n_games=10, hidden_sizes=[32], render=False, epochs=10, n_observed_periods=1):
+def evaluate(PATH=None, n_games=10, hidden_sizes=[32], render=False, epochs=10, n_observed_periods=1):
     agent = 1
-    action_means = []
-    return_means = []
+    batch_actions = []
+    batch_returns = []
     epoch = 0
-
+    agent_sim = AgentSimulator()
 
     env = BeerGame("classical", n_observed_periods=n_observed_periods, n_turns_per_game=20)
     start_state = env.reset()
@@ -190,16 +194,16 @@ def evaluate(PATH, n_games=10, hidden_sizes=[32], render=False, epochs=10, n_obs
     n_acts = env.action_space.nvec[agent]
 
     global logits_net
+
     logits_net = mlp(sizes=[obs_dim] + hidden_sizes + [n_acts])
-
-    checkpoint=torch.load(PATH)
-    logits_net.load_state_dict(checkpoint['model_state_dict'])
-    epoch = checkpoint['epoch']
-    loss=checkpoint['loss']
-    #action_means = checkpoint['action_means']
-    #return_means = checkpoint['return_means']
+    if PATH:
+        checkpoint = torch.load(PATH)
+        logits_net.load_state_dict(checkpoint['model_state_dict'])
+        epoch = checkpoint['epoch']
+        loss = checkpoint['loss']
+        # action_means = checkpoint['action_means']
+        # return_means = checkpoint['return_means']
     logits_net.eval()
-
 
     # for training policy
     def eval_one_round():
@@ -216,21 +220,24 @@ def evaluate(PATH, n_games=10, hidden_sizes=[32], render=False, epochs=10, n_obs
         ep_rews = []
         ep_rews_total = []
 
-        #render first episode of each epoch
+        # render first episode of each epoch
         finished_rendering_this_epoch = False
 
-        #collect experience by acting in the environment with current policy
+        # collect experience by acting in the environment with current policy
         while True:
             # rendering
-            if(not finished_rendering_this_epoch) and render:
+            if (not finished_rendering_this_epoch) and render:
                 env.render()
 
             batch_obs.append(obs.copy())
 
-            #act in environment
+            # act in environment
             with torch.no_grad():
                 act = get_action(torch.as_tensor(obs, dtype=torch.float32))
-            actions = get_other_actions("base_stock", obs_total, env.demand_dist, env.turn)
+
+            actions = agent_sim.get_other_actions("sterman", obs_total, env.demand_dist, env.turn, env.orders,
+                                                  env.demands, env.shipments)
+            #actions_2 = agent_sim.get_other_actions("sterman", obs_total, env.demand_dist, env.turn, env.orders, env.demands, env.shipments)
             actions[agent] = act
             obs_total, rew_total, done, _ = env.step(actions)
             obs, rew = obs_total[agent].flatten(), rew_total[agent]
@@ -240,58 +247,95 @@ def evaluate(PATH, n_games=10, hidden_sizes=[32], render=False, epochs=10, n_obs
             ep_rews_total.append(rew_total)
 
             if done:
-                #ep_ret, ep_len = sum(ep_rews), len(ep_rews)
+                # ep_ret, ep_len = sum(ep_rews), len(ep_rews)
                 ep_ret = sum([sum(elem) for elem in ep_rews_total])
 
                 batch_rets.append(ep_ret)
-                #feedback = calculate_feedback(ep_rews_total, agent, 10)
+                # feedback = calculate_feedback(ep_rews_total, agent, 10)
 
                 # batch_weights += [ep_ret]*ep_len
                 # batch_weights += feedback
 
                 obs_total, done, ep_rews, ep_rews_total = env.reset(), False, [], []
+                agent_sim.reset()
+
                 obs = obs_total[agent].flatten()
                 finished_rendering_this_epoch = True
 
                 # end experience loope if we have enough of it
-                #if len(batch_obs) > batch_size:
+                # if len(batch_obs) > batch_size:
                 break
 
         # take a single policy gradient update step
 
         return batch_rets, batch_acts
 
-       # Create Plots
+    # Create Plots
     plt.ion()
     f = plt.figure(1)
-    ax1 = f.add_subplot(2,1,1)
-    ax2 = f.add_subplot(2,1,2)
+    ax1 = f.add_subplot(2, 1, 1)
+    ax2 = f.add_subplot(2, 1, 2)
     ax1.set_xlabel("epoch")
     ax1.set_ylabel("Cost in game")
     ax2.set_xlabel("epoch")
     ax2.set_ylabel("Cost in game")
 
     for i in range(n_games):
-        batch_rets, batch_acts = eval_one_round()
-        action_means.append(sum(batch_acts)/len(batch_acts))
-        return_means.append(sum(batch_rets)/len(batch_rets))
+        ret, batch_acts = eval_one_round()
+        batch_actions.append(batch_acts)
+        batch_returns.append(ret[0])
 
-        df_1 = pd.Series(action_means)
-        df_2 = pd.Series(return_means)
+        # df_1 = pd.Series(batch_actions)
+        df_2 = pd.Series(batch_returns)
 
-        ax1.plot(df_1)
+        # ax1.plot(df_1)
         ax2.plot(df_2)
         plt.pause(0.0001)
 
-        print(f'epoch: {i} \t return: {batch_rets[0]} \t orders: {batch_acts}')
+        print(f'epoch: {i} \t return: {ret} \t orders: {batch_acts}')
 
     f.show()
+
+    return batch_returns, batch_actions
 
 
 if __name__ == "__main__":
     n_observed_periods = 5
-    train(continuation=True, PATH="checkpoint.pt", epochs=1000, lr=1e-4, n_observed_periods=n_observed_periods)
-    evaluate(PATH="checkpoint.pt", n_observed_periods=n_observed_periods)
+    returns = []
+    actions = []
+import os
 
+dir = os.path.dirname(__file__)
+PATH = os.path.join(dir, 'logs','checkpoint_24_05_sterman.pt')
 
+for i in range(1, 10):
+    if i == 1:
+        continuation = False
+    else:
+        continuation = True
+    train(continuation=continuation, PATH=PATH, epochs=i * 10, lr=1e-6, n_observed_periods=n_observed_periods)
+
+    ret, acts = evaluate(PATH=PATH, n_observed_periods=n_observed_periods)
+    returns.append(ret)
+    actions.append(acts)
+
+returns_flat = sum(returns, [])
+
+means = [(sum(x) / len(x)) for x in returns]
+print(f"mean of 50 test = {sum(means) / len(means)}")
+
+plt.ion()
+f = plt.figure(3)
+# ax1 = f.add_subplot(2,1,1)
+# ax2 = f.add_subplot(2,1,2)
+plt.xlabel("game")
+plt.ylabel("Cost in game")
+plt.plot(returns_flat)
+f.show()
+
+PATH = os.path.join(dir, 'logs','checkpoint_24_05_sterman_eval.pt')
+torch.save({
+    'returns': returns,
+    'actions': actions
+}, PATH)
 

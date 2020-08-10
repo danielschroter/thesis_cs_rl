@@ -306,14 +306,14 @@ if __name__ == "__main__":
 import os
 
 dir = os.path.dirname(__file__)
-PATH = os.path.join(dir, 'logs','checkpoint_24_05_sterman.pt')
+PATH = os.path.join(dir, 'logs','checkpoint_17_06_sterman.pt')
 
-for i in range(1, 10):
+for i in range(250, 300):
     if i == 1:
         continuation = False
     else:
         continuation = True
-    train(continuation=continuation, PATH=PATH, epochs=i * 10, lr=1e-6, n_observed_periods=n_observed_periods)
+    train(continuation=continuation, PATH=PATH, epochs=i * 10, lr=1e-4, n_observed_periods=n_observed_periods)
 
     ret, acts = evaluate(PATH=PATH, n_observed_periods=n_observed_periods)
     returns.append(ret)
@@ -333,7 +333,7 @@ plt.ylabel("Cost in game")
 plt.plot(returns_flat)
 f.show()
 
-PATH = os.path.join(dir, 'logs','checkpoint_24_05_sterman_eval.pt')
+PATH = os.path.join(dir, 'logs','checkpoint_17_06_sterman_eval.pt')
 torch.save({
     'returns': returns,
     'actions': actions

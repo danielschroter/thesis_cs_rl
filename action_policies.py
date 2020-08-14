@@ -5,17 +5,19 @@ import copy
 
 class AgentSimulator():
 
-    def __init__(self, n_agents=4):
+    def __init__(self, policy, n_agents=4, discrete = True):
         self.expected_demands = [4] * n_agents
         self.n_agents = n_agents
+        self.policy = policy
         self.arr_orders = [[4] for i in range(n_agents)]
+        self.discrete = discrete
 
     def reset(self):
         self.expected_demands = [4] * self.n_agents
         self.arr_orders = [[4] for i in range(self.n_agents)]
 
-    def get_other_actions(self, policy, obs_total, demand_dist, turn, orders, demand, shipments, discrete=True):
-        if policy not in ["random", "base_stock", "sterman"]:
+    def get_other_actions(self, obs_total, demand_dist, turn, orders, demand, shipments, original = False):
+        if self.policy not in ["random", "base_stock", "sterman"]:
             raise NotImplementedError("policy of other agents must be in: [random, base_stock, sterman]")
 
         curr_obs = [x[-1] for x in obs_total]
@@ -46,10 +48,22 @@ class AgentSimulator():
 
         # select actions according to policy
 
-        if policy == "random":
-            actions = np.random.uniform(0, 16, size=4)
-            actions = actions.astype(int)
-        elif policy == "base_stock":
+        if self.policy == "random":
+            actions = None
+            if demand_dist == "classical":
+                actions = np.random.uniform(0, 16, size=4)
+            elif demand_dist == 'uniform_0_2':
+                actions = np.random.uniform(0, 2, size=4)
+            elif demand_dist == 'uniform_0_8':
+                actions = np.random.uniform(0, 8, size=4)
+            elif demand_dist == 'normal_10_4':
+                actions = np.random.uniform(0, 20, size=4)
+            else:
+                raise ValueError("Demand_dist must be out of [classical, uniform_0_8, uniform_0_2, normal_10_4]."
+                                 "Other optimal base stock levels are not known")
+            if self.discrete:
+                actions = actions.astype(int)
+        elif self.policy == "base_stock":
             if demand_dist == "classical" or demand_dist == "test":
                 base_stock_level = [32, 32, 32, 24]  # according to dqn paper page 24
             elif demand_dist == 'uniform_0_2':
@@ -68,7 +82,7 @@ class AgentSimulator():
             actions = [(x - y) for x, y in zip(base_stock_level, inventory_position)]
             actions = [max(0, a) for a in actions]
 
-        elif policy == "sterman":
+        elif self.policy == "sterman":
 
             # Parameters and initial values
             mdt = [1 for i in range(n_agents - 1)]  # mailing delay time
@@ -109,14 +123,21 @@ class AgentSimulator():
 
             shipments_sum = [sum(x) for x in shipments]
 
-            # According to dqn paper using the mean. Better suits other demand ditr.
+
+
             if turn == 0:
                 d_mean = [4] * n_agents
             else:
                 d_mean = [sum(elem) / len(elem) for elem in self.arr_orders]
 
-            desired_inventory = d_mean
-            # desired_inventory = [0]*n_agents
+            # According to dqn paper using the mean for the desired inventory model. Better suits other demand ditr.
+             # In A Matheatical Model of the Beer Game by Edali and Yasarcan the desired inventory is 0
+
+            if original:
+                desired_inventory = [0]*n_agents
+            else:
+                desired_inventory = d_mean
+            #
 
             sl = [(arriving_orders[i + 1] + shipments_sum[i] + max(0, -inventory_levels[i + 1])) for i in
                   range(n_agents - 1)] + [shipments_sum[-1]]
@@ -129,19 +150,19 @@ class AgentSimulator():
                     return [4] * n_agents
                 else:
                     new_orders[i] = max(0, self.expected_demands[i] + ia[i] + sla[i])
-            if discrete:
+            if self.discrete:
                 new_orders = [math.floor(elem + 0.5) for elem in new_orders]
             return new_orders
 
         else:
-            raise NotImplementedError("Only random or base_stock are currently implemented")
+            raise NotImplementedError("Only random, sterman or base_stock are currently implemented")
         return actions
 
         # pretend for the first 4 periods, that incoming orders are 8
 
 
 # Feedback Scheme DQN Paper p. 14
-def calculate_feedback(rews_total, agent, beta):
+def calculate_feedback(rews_total, agent, beta = 10):
     T = len(rews_total)
     w = 0
     tau_aux = [[] for i in range(len(rews_total[0]))]

@@ -2,17 +2,14 @@ import torch
 import torch.nn as nn
 from torch.distributions.categorical import Categorical
 from torch.optim import Adam
-import gym
-from gym.spaces import Discrete, Box
 import numpy as np
-from bg_env import BeerGame
+from beer_game.envs.bg_env import BeerGame
 from action_policies import AgentSimulator
 from action_policies import calculate_feedback
 import pandas as pd
 import matplotlib.pyplot as plt
 
 global logits_net
-
 
 def mlp(sizes, activation=nn.Tanh, output_activation=nn.Identity):
     layers = []
@@ -38,7 +35,7 @@ def compute_loss(obs, act, weights):
     return -(logp * weights).mean()
 
 
-def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch_size=5000,
+def train(env_name="BeerGame-v0", policy_others="sterman", hidden_sizes=[32], lr=1e-2, epochs=1000, batch_size=5000,
           render=False, continuation=False, PATH=None, n_observed_periods=1):
     agent = 1
     action_means = []
@@ -53,6 +50,7 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
 
     obs_dim = env.observation_space.shape[1]
     n_acts = env.action_space.nvec[agent]
+
     global logits_net
     logits_net = mlp(sizes=[obs_dim] + hidden_sizes + [n_acts])
 
@@ -99,7 +97,7 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
 
             # act in environment
             act = get_action(torch.as_tensor(obs, dtype=torch.float32))
-            actions = agent_sim.get_other_actions("sterman", obs_total, env.demand_dist, env.turn, env.orders,
+            actions = agent_sim.get_other_actions(policy_others, obs_total, env.demand_dist, env.turn, env.orders,
                                                   env.demands, env.shipments)
             actions[agent] = act
             obs_total, rew_total, done, _ = env.step(actions)
@@ -165,9 +163,10 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
               (i, batch_loss, np.mean(batch_rets)))
 
         if (i + 1) % 10 == 0:
-            #PATH = "checkpoint.pt"
+            # PATH = "checkpoint.pt"
             torch.save({
                 'epoch': i,
+                'policy_others' : policy_others,
                 'model_state_dict': logits_net.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': batch_loss,
@@ -178,7 +177,8 @@ def train(env_name="BeerGame-v0", hidden_sizes=[32], lr=1e-2, epochs=1000, batch
     f.show()
 
 
-def evaluate(PATH=None, n_games=10, hidden_sizes=[32], render=False, epochs=10, n_observed_periods=1):
+def evaluate(PATH=None, n_games=10, hidden_sizes=[32], policy_others="sterman", render=False, epochs=10,
+             n_observed_periods=1):
     agent = 1
     batch_actions = []
     batch_returns = []
@@ -235,9 +235,9 @@ def evaluate(PATH=None, n_games=10, hidden_sizes=[32], render=False, epochs=10, 
             with torch.no_grad():
                 act = get_action(torch.as_tensor(obs, dtype=torch.float32))
 
-            actions = agent_sim.get_other_actions("sterman", obs_total, env.demand_dist, env.turn, env.orders,
+            actions = agent_sim.get_other_actions(policy_others, obs_total, env.demand_dist, env.turn, env.orders,
                                                   env.demands, env.shipments)
-            #actions_2 = agent_sim.get_other_actions("sterman", obs_total, env.demand_dist, env.turn, env.orders, env.demands, env.shipments)
+            # actions_2 = agent_sim.get_other_actions("sterman", obs_total, env.demand_dist, env.turn, env.orders, env.demands, env.shipments)
             actions[agent] = act
             obs_total, rew_total, done, _ = env.step(actions)
             obs, rew = obs_total[agent].flatten(), rew_total[agent]
@@ -303,17 +303,21 @@ if __name__ == "__main__":
     n_observed_periods = 5
     returns = []
     actions = []
+
 import os
+from datetime import datetime
 
 dir = os.path.dirname(__file__)
-PATH = os.path.join(dir, 'logs','checkpoint_17_06_sterman.pt')
+date = str(datetime.date(datetime.now()))
+policy_others = "sterman"
+PATH = os.path.join(dir, 'logs', 'checkpoint_' + date + '_' + policy_others + '.pt')
 
-for i in range(250, 300):
+for i in range(20, 30):
     if i == 1:
         continuation = False
     else:
         continuation = True
-    train(continuation=continuation, PATH=PATH, epochs=i * 10, lr=1e-4, n_observed_periods=n_observed_periods)
+    train(continuation=continuation, policy_others="sterman", PATH=PATH, epochs=i * 10, lr=1e-4, n_observed_periods=n_observed_periods)
 
     ret, acts = evaluate(PATH=PATH, n_observed_periods=n_observed_periods)
     returns.append(ret)
@@ -333,9 +337,9 @@ plt.ylabel("Cost in game")
 plt.plot(returns_flat)
 f.show()
 
-PATH = os.path.join(dir, 'logs','checkpoint_17_06_sterman_eval.pt')
+PATH = os.path.join(dir, 'logs', 'checkpoint_' + date + '_' + policy_others + '_eval.pt')
 torch.save({
+    'policy_others' : policy_others,
     'returns': returns,
     'actions': actions
 }, PATH)
-

@@ -49,9 +49,10 @@ def state_dict_to_array(states):
 class BeerGame(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, demand_dist: str, n_turns_per_game=40, n_discrete_actions=7,
-                 n_observed_periods=5):
+    def __init__(self, demand_dist = "classical", n_turns_per_game=40, n_discrete_actions=7,
+                 n_observed_periods=5, discrete=True):
         super().__init__()
+        self.discrete = discrete
         self.orders = []
         self.shipments = []
         self.arriving_orders = []
@@ -97,10 +98,16 @@ class BeerGame(gym.Env):
         where 0 = -n_discrete_actions/2, n_discrete_actions/2 = 0, n_discrete_actions=n_discrete_actions/2
         
         """
-        self.action_space = spaces.MultiDiscrete([16]*self.n_agents)
-
+        self.action_space = None
+        if self.discrete:
+            self.action_space = spaces.MultiDiscrete([16]*self.n_agents)
+        else:
+            if (demand_dist == "uniform_0_8"):
+                self.action_space = spaces.Box(low=0.0, high=8.0, dtype=np.float64, shape=(4,))
+            else:
+                self.action_space = spaces.Box(low=0.0, high=30.0, dtype=np.float64, shape=(4,))
         """
-        Observation space, available for each player for full information sharing
+        Observation space
         Num	Observation               Min             Max
         0	Inventory Level           -Inf            Inf
         1	On order item             -Inf            Inf
@@ -115,10 +122,10 @@ class BeerGame(gym.Env):
         observations = [None] * self.n_agents
         for i in range(self.n_agents):
             observations[i] = {'inventory_level': self.inventory_levels[i],
-                               'orders': list(self.orders[i]),
+                               #'orders': list(self.orders[i]),
                                'on_order': self.on_order[i],
                                'arriving_order': self.arriving_orders[i],
-                               'shipments': list(self.shipments[i]),
+                               #'shipments': list(self.shipments[i]),
                                'arriving_shipments': self.arriving_shipments[i]}
         return observations
 

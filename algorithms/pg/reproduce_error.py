@@ -148,7 +148,7 @@ def train(env,agent, agent_sim, controlled_agent, epochs=1000, batch_size=5000,
               (i, batch_loss, np.mean(batch_rets)))
 
         # save regulary
-        if (i + 1) % 20 == 0:
+        if (i + 1) % 100 == 0:
             # PATH = "checkpoint.pt"
             torch.save({
                 'epoch': i,

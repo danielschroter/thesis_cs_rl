@@ -103,9 +103,9 @@ class BeerGame(gym.Env):
             self.action_space = spaces.MultiDiscrete([16]*self.n_agents)
         else:
             if (demand_dist == "uniform_0_8"):
-                self.action_space = spaces.Box(low=0.0, high=8.0, dtype=np.float64, shape=(4,))
+                self.action_space = spaces.Box(low=0.0, high=8.0, dtype=np.float32, shape=(4,))
             else:
-                self.action_space = spaces.Box(low=0.0, high=30.0, dtype=np.float64, shape=(4,))
+                self.action_space = spaces.Box(low=0.0, high=30.0, dtype=np.float32, shape=(4,))
         """
         Observation space
         Num	Observation               Min             Max
@@ -116,7 +116,7 @@ class BeerGame(gym.Env):
         """
 
         self.observation_space = spaces.Box(low=-np.finfo(np.float32).max, high=np.finfo(np.float32).max,
-                                            dtype=np.float64, shape=(4, 4*n_observed_periods))
+                                            dtype=np.float32, shape=(4, 4*n_observed_periods))
 
     def _get_observations(self):
         observations = [None] * self.n_agents
@@ -198,10 +198,10 @@ class BeerGame(gym.Env):
 
         # initialize other variables
         # Good Coding shouldnt depend on order of initialization!
-        self.holding_cost = np.zeros(self.n_agents, dtype=np.float)
-        self.stockout_cost = np.zeros(self.n_agents, dtype=np.float)
-        self.cum_holding_cost = np.zeros(self.n_agents, dtype=np.float)
-        self.cum_stockout_cost = np.zeros(self.n_agents, dtype=np.float)
+        self.holding_cost = np.zeros(self.n_agents, dtype=np.float32)
+        self.stockout_cost = np.zeros(self.n_agents, dtype=np.float32)
+        self.cum_holding_cost = np.zeros(self.n_agents, dtype=np.float32)
+        self.cum_stockout_cost = np.zeros(self.n_agents, dtype=np.float32)
         self.orders = [deque(x) for x in temp_orders]
         self.shipments = [deque(x) for x in temp_shipments]
         self.arriving_orders = [self.demands[0]] + [x[0] for x in temp_orders[:-1]]
@@ -272,8 +272,8 @@ class BeerGame(gym.Env):
 
         #Reset & Calculate cost
 
-        self.holding_cost = np.zeros(self.n_agents, dtype=np.float)
-        self.stockout_cost = np.zeros(self.n_agents, dtype=np.float)
+        self.holding_cost = np.zeros(self.n_agents, dtype=np.float32)
+        self.stockout_cost = np.zeros(self.n_agents, dtype=np.float32)
 
         for i in range(self.n_agents):
             if self.inventory_levels[i] >= 0:

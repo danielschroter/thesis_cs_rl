@@ -6,11 +6,11 @@ import random
 if __name__ == "__main__":
 
 
-    N_TURNS_PER_GAME = 20
+    N_TURNS_PER_GAME = 36
     DEMAND_DIST = "uniform_0_8"
     POLICY_OTHERS = "random"
     CONTROLLED_AGENT = 1
-    POLICY_AGENT = "base_stock"
+    POLICY_AGENT = "random"
     seed = 123
 
     random.seed(seed)

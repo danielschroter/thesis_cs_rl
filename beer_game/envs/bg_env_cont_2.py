@@ -50,8 +50,9 @@ class BeerGame(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self, demand_dist = "classical", n_turns_per_game=40, n_discrete_actions=7,
-                 n_observed_periods=5):
+                 n_observed_periods=5, discrete=True):
         super().__init__()
+        self.discrete = discrete
         self.orders = []
         self.shipments = []
         self.arriving_orders = []
@@ -97,10 +98,16 @@ class BeerGame(gym.Env):
         where 0 = -n_discrete_actions/2, n_discrete_actions/2 = 0, n_discrete_actions=n_discrete_actions/2
         
         """
-        self.action_space = spaces.MultiDiscrete([16]*self.n_agents)
-
+        self.action_space = None
+        if self.discrete:
+            self.action_space = spaces.MultiDiscrete([16]*self.n_agents)
+        else:
+            if (demand_dist == "uniform_0_8"):
+                self.action_space = spaces.Box(low=0.0, high=8.0, dtype=np.float32, shape=(4,))
+            else:
+                self.action_space = spaces.Box(low=0.0, high=30.0, dtype=np.float32, shape=(4,))
         """
-        Observation space, available for each player for full information sharing
+        Observation space
         Num	Observation               Min             Max
         0	Inventory Level           -Inf            Inf
         1	On order item             -Inf            Inf
@@ -109,7 +116,7 @@ class BeerGame(gym.Env):
         """
 
         self.observation_space = spaces.Box(low=-np.finfo(np.float32).max, high=np.finfo(np.float32).max,
-                                            dtype=np.float64, shape=(4, 4*n_observed_periods))
+                                            dtype=np.float32, shape=(4, 4*n_observed_periods))
 
     def _get_observations(self):
         observations = [None] * self.n_agents
@@ -139,18 +146,18 @@ class BeerGame(gym.Env):
         self.done = False
 
         if self.demand_dist == 'classical':
-            temp_orders = [[4, 4]] * (self.n_agents - 1) + [[4]]
-            temp_shipments = [[4, 4]] * self.n_agents
-            self.arriving_orders = [4] * self.n_agents
-            self.inventory_levels = [12] * self.n_agents
-            self.demands = [4] * 4 + [8] * (self.n_turns - 4)
-            self.cost_weights = [[0.5] * self.n_agents, [1] * self.n_agents]
+            temp_orders = [[4., 4.]] * (self.n_agents - 1) + [[4]]
+            temp_shipments = [[4., 4.]] * self.n_agents
+            self.arriving_orders = [4.] * self.n_agents
+            self.inventory_levels = [12.] * self.n_agents
+            self.demands = [4.] * 4 + [8.] * (self.n_turns - 4)
+            self.cost_weights = [[0.5] * self.n_agents, [1.] * self.n_agents]
 
         elif self.demand_dist == 'uniform_0_2':
-            temp_orders = [[1, 1]] * (self.n_agents - 1) + [[1]]
-            temp_shipments = [[1, 1]] * self.n_agents
-            self.arriving_orders = [1] * self.n_agents
-            self.inventory_levels = [4] * self.n_agents
+            temp_orders = [[1., 1.]] * (self.n_agents - 1) + [[1.]]
+            temp_shipments = [[1., 1.]] * self.n_agents
+            self.arriving_orders = [1.] * self.n_agents
+            self.inventory_levels = [4.] * self.n_agents
 
             # uniform [0, 2]
             self.demands = self.np_random.uniform(low=0, high=3, size=self.n_turns).astype(np.int)
@@ -158,20 +165,20 @@ class BeerGame(gym.Env):
 
         elif self.demand_dist == 'uniform_0_8':
             ## what are the orders?
-            temp_orders = [[4, 4]] * (self.n_agents - 1) + [[4]]
-            temp_shipments = [[4, 4]] * self.n_agents
-            self.arriving_orders = [4] * self.n_agents
-            self.inventory_levels = [12] * self.n_agents
+            temp_orders = [[4., 4.]] * (self.n_agents - 1) + [[4.]]
+            temp_shipments = [[4., 4.]] * self.n_agents
+            self.arriving_orders = [4.] * self.n_agents
+            self.inventory_levels = [12.] * self.n_agents
 
             # uniform [0, 8]
             self.demands = self.np_random.uniform(low=0, high=8, size=self.n_turns).astype(np.int)
             self.cost_weights = [[0.5] * self.n_agents, [1.0] * self.n_agents]
 
         elif self.demand_dist == 'normal_10_4':
-            temp_orders = [[10, 10]] * (self.n_agents - 1) + [[10]]
-            temp_shipments = [[10, 10]] * self.n_agents
-            self.arriving_orders = [10] * self.n_agents
-            self.inventory_levels = [40] * self.n_agents
+            temp_orders = [[10., 10.]] * (self.n_agents - 1) + [[10]]
+            temp_shipments = [[10., 10.]] * self.n_agents
+            self.arriving_orders = [10.] * self.n_agents
+            self.inventory_levels = [40.] * self.n_agents
 
             self.demands = self.np_random.normal(loc=10, scale=4, size=self.n_turns)
             self.demands = np.clip(self.demands, 0, 1000).astype(np.int)
@@ -191,10 +198,10 @@ class BeerGame(gym.Env):
 
         # initialize other variables
         # Good Coding shouldnt depend on order of initialization!
-        self.holding_cost = np.zeros(self.n_agents, dtype=np.float)
-        self.stockout_cost = np.zeros(self.n_agents, dtype=np.float)
-        self.cum_holding_cost = np.zeros(self.n_agents, dtype=np.float)
-        self.cum_stockout_cost = np.zeros(self.n_agents, dtype=np.float)
+        self.holding_cost = np.zeros(self.n_agents, dtype=np.float32)
+        self.stockout_cost = np.zeros(self.n_agents, dtype=np.float32)
+        self.cum_holding_cost = np.zeros(self.n_agents, dtype=np.float32)
+        self.cum_stockout_cost = np.zeros(self.n_agents, dtype=np.float32)
         self.orders = [deque(x) for x in temp_orders]
         self.shipments = [deque(x) for x in temp_shipments]
         self.arriving_orders = [self.demands[0]] + [x[0] for x in temp_orders[:-1]]
@@ -233,8 +240,9 @@ class BeerGame(gym.Env):
         if len(action) != self.n_agents:
             raise error.InvalidAction(f'Length of action array must be same as n_agents({self.n_agents})')
         if any(np.array(action) < 0):
+            print(action)
             raise error.InvalidAction(f"You can't order negative amount. You agents actions are: {action}")
-
+            quit()
         # Make incoming step (See Sterman 1989)
 
         # 1. Learn demand (inbound quantity) = self.arriving_orders
@@ -265,8 +273,8 @@ class BeerGame(gym.Env):
 
         #Reset & Calculate cost
 
-        self.holding_cost = np.zeros(self.n_agents, dtype=np.float)
-        self.stockout_cost = np.zeros(self.n_agents, dtype=np.float)
+        self.holding_cost = np.zeros(self.n_agents, dtype=np.float32)
+        self.stockout_cost = np.zeros(self.n_agents, dtype=np.float32)
 
         for i in range(self.n_agents):
             if self.inventory_levels[i] >= 0:
@@ -296,3 +304,16 @@ class BeerGame(gym.Env):
         self.prev_states.append(self._get_observations())
         state = self._get_state()
         return state, rewards, self.done, {}
+
+
+if __name__ == '__main__':
+    env = BeerGame("test", n_observed_periods=1)
+    start_state = env.reset()
+    env.render()
+    done = False
+    while not done:
+        actions = np.random.uniform(0, 16, size=4)
+        actions = actions.astype(int)
+        step_state, step_rewards, done, _ = env.step(actions)
+        # print("state: ", step_state)
+        env.render()

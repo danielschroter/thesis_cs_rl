@@ -6,16 +6,16 @@ from algorithms.pg.pgAgent_cont import PGAgent_cont
 from algorithms.pg.pgAgent import PGAgent
 
 import numpy as np
-from beer_game.envs.bg_env_cont import BeerGame
+from beer_game.envs.bg_env_cont_2 import BeerGame
 from action_policies import AgentSimulator
-from action_policies import calculate_feedback
+from action_policies import calculate_feedback, calculate_expectedReturn
 import pandas as pd
 import matplotlib.pyplot as plt
 
 # logits_net
 
 # for training policy
-def run_one_time(env, agent, agent_sim, batch_size = 5000, controlled_agent = 1, mode="train"):
+def run_one_time(env, agent, agent_sim, batch_size = 5000, controlled_agent = 1, mode="train", discount = 1, beta = 10):
     train = True
     if mode == "train":
         train = True
@@ -29,6 +29,7 @@ def run_one_time(env, agent, agent_sim, batch_size = 5000, controlled_agent = 1,
     batch_acts = []
     batch_weights = []
     batch_rets = []
+    n_rounds = 0
 
     # reset episode specific variables
     obs_total = env.reset()
@@ -62,15 +63,14 @@ def run_one_time(env, agent, agent_sim, batch_size = 5000, controlled_agent = 1,
         ep_rews_total.append(rew_total)
 
         if done:
-            # ep_ret, ep_len = sum(ep_rews), len(ep_rews)
             ep_ret = sum([sum(elem) for elem in ep_rews_total])
-
+            n_rounds = len(ep_rews_total)
             batch_rets.append(ep_ret)
             if train:
-                feedback = calculate_feedback(ep_rews_total, controlled_agent, 10)
-                batch_weights += feedback
+                feedback = calculate_feedback(ep_rews_total, controlled_agent, beta)
+                exp_Ret = calculate_expectedReturn(feedback, discount)
+                batch_weights += exp_Ret
 
-            # batch_weights += [ep_ret]*ep_len
 
             obs_total, done, ep_rews, ep_rews_total = env.reset(), False, [], [],
             agent_sim.reset()
@@ -83,17 +83,19 @@ def run_one_time(env, agent, agent_sim, batch_size = 5000, controlled_agent = 1,
             # end experience loope if we have enough of it
             if len(batch_obs) > batch_size:
                 break
+
     # calculate batch_loss and take a single policy gradient update step
     if train:
-        batch_loss = agent.learn(batch_obs, batch_acts, batch_weights)
+        n_traj = len(batch_obs)/n_rounds
+        batch_loss = agent.learn(batch_obs, batch_acts, batch_weights, n_traj)
         return batch_loss, batch_rets, batch_acts
 
     # return batch returns and batch actions if in evaluation mode
     return batch_rets, batch_acts
 
 
-def train(env,agent, agent_sim, controlled_agent, epochs=1000, batch_size=20,
-          continuation=False, PATH=None, plot=False):
+def train(env,agent, agent_sim, controlled_agent, epochs=1000, batch_size=5000,
+          continuation=False, PATH=None, plot=False, discount=1, beta = 10):
 
     action_means = []
     return_means = []
@@ -130,7 +132,7 @@ def train(env,agent, agent_sim, controlled_agent, epochs=1000, batch_size=20,
     #training loop
     for i in range(epoch, epochs):
         batch_loss, batch_rets, batch_acts = run_one_time(env, agent, agent_sim, batch_size, controlled_agent,
-                                                          mode="train")
+                                                          mode="train", discount=discount, beta=beta)
         action_means.append(sum(batch_acts) / len(batch_acts))
         return_means.append(sum(batch_rets) / len(batch_rets))
         losses.append(batch_loss)
@@ -146,7 +148,7 @@ def train(env,agent, agent_sim, controlled_agent, epochs=1000, batch_size=20,
               (i, batch_loss, np.mean(batch_rets)))
 
         # save regulary
-        if (i + 1) % 50 == 0:
+        if (i + 1) % 20 == 0:
             # PATH = "checkpoint.pt"
             torch.save({
                 'epoch': i,
@@ -188,17 +190,48 @@ def evaluate(env, agent, agent_sim, controlled_agent, PATH=None, n_games=50):
 
     return batch_returns, batch_actions
 
-def log_parameter(Agent, MODE, DEMAND_DIST, N_OBSERVED_PERIODS, LR, CONTROLLED_AGENT, N_TURNS_PER_GAME, POLICY_OTHERS, HIDDEN_SIZE, EPOCHS):
-    out = ""
-    out = out + ('\n' + '=' * 20)
 
-def plot_returns(returns_means, PATH):
+def plot_returns(return_means, PATH):
     f = plt.figure(1)
     plt.plot(return_means)
     plt.xlabel('epochs')
     plt.ylabel('mean cost of game during one epoch ')
     f.show()
     f.savefig(PATH)
+
+def grid_search(n_observed_preiods, discount, beta):
+    LR = 1e-4
+    CONTROLLED_AGENT = 1
+    N_TURNS_PER_GAME = 36
+    POLICY_OTHERS = "sterman"
+    DEMAND_DIST = "classical"
+    HIDDEN_SIZES = [32, 32]
+    EPOCHS = 1200
+    ALGORITHM = "policy_gradient"
+    MODE = 'discrete'
+    DISCRETE=True
+    seed = 0
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    CHECKPOINT = 'tmp/grid/pg/discrete'
+    for p in n_observed_preiods:
+        for d in discount:
+            for b in beta:
+                print(f"train: observed periods = {p}, discount = {d}, beta = {b}")
+                PATH = os.path.join(CHECKPOINT, "periods_"+ str(p) + "_dis_" + str(d) + "_beta_" + str(b))
+                env = BeerGame(demand_dist=DEMAND_DIST,  n_observed_periods=p, n_turns_per_game=36, discrete=DISCRETE)
+                obs_dim = env.observation_space.shape[1]
+                #n_acts = env.action_space.high[CONTROLLED_AGENT]
+                n_acts = env.action_space.nvec[CONTROLLED_AGENT]
+                pgAgent = PGAgent(LR, sizes=[obs_dim] + HIDDEN_SIZES, n_actions=n_acts)
+                agentSim = AgentSimulator(policy=POLICY_OTHERS, discrete=DISCRETE)
+                action_means, return_means = train(env, pgAgent, agentSim, 1, epochs=EPOCHS, PATH=(PATH+'.pt'), continuation=False, discount=d,
+                                                   beta=b)
+                plot_returns(return_means, PATH = (PATH+".png"))
+                ret, acts = evaluate(env, pgAgent, agentSim, n_games=1000, controlled_agent=CONTROLLED_AGENT, PATH=(PATH+'.pt'))
+
+
 
 
 if __name__ == "__main__":
@@ -207,23 +240,26 @@ if __name__ == "__main__":
     from datetime import datetime
     import random
 
+    #grid_search([5,10], [1, 0.95], [10,100])
     N_OBSERVED_PERIODS = 5
     LR = 1e-4
     CONTROLLED_AGENT = 1
-    N_TURNS_PER_GAME = 20
+    N_TURNS_PER_GAME = 36
     POLICY_OTHERS = "sterman"
     DEMAND_DIST = "classical"
-    HIDDEN_SIZES = [32]
-    EPOCHS = 10000
+    HIDDEN_SIZES = [32, 32]
+    EPOCHS = 1200
     ALGORITHM = "policy_gradient"
-    MODE = 'discrete'
-    DISCRETE=True
-    seed = 0
+    DISCRETE=False
+    MODE = "discrete" if DISCRETE else "continuous"
+    BETA = 100
+    beta = str(BETA)
+    seed = 111
     returns = []
     actions = []
     dir = os.path.dirname(__file__)
     date = str(datetime.date(datetime.now()))
-    #PATH = os.path.join(dir, 'logs', 'checkpoint_' + date + '_' + MODE + "_" + DEMAND_DIST + '_' + POLICY_OTHERS)
+    #PATH = os.path.join(dir, 'logs', 'checkpoint_' + date + '_' + MODE + "_" + DEMAND_DIST + '_' + POLICY_OTHERS + '_' + beta)
     PATH = os.path.join(dir, 'logs', 'trial_5')
 
     random.seed(seed)
@@ -234,14 +270,14 @@ if __name__ == "__main__":
 
 
     obs_dim = env.observation_space.shape[1]
-    #n_acts = env.action_space.high[CONTROLLED_AGENT]
-    n_acts = env.action_space.nvec[CONTROLLED_AGENT]
+    n_acts = env.action_space.high[CONTROLLED_AGENT]
+    #n_acts = env.action_space.nvec[CONTROLLED_AGENT]
 
 
-    #pgAgent = PGAgent_cont(LR, sizes=[obs_dim] + HIDDEN_SIZES, n_actions=2)
-    pgAgent = PGAgent(LR, sizes=[obs_dim] + HIDDEN_SIZES, n_actions=n_acts)
+    pgAgent = PGAgent_cont(LR, sizes=[obs_dim] + HIDDEN_SIZES, n_actions=2)
+    #pgAgent = PGAgent(LR, sizes=[obs_dim] + HIDDEN_SIZES, n_actions=n_acts)
     agentSim = AgentSimulator(policy=POLICY_OTHERS, discrete=DISCRETE)
-    action_means, return_means = train(env, pgAgent, agentSim, 1, epochs=EPOCHS, PATH=(PATH+'.pt'), continuation=True)
+    action_means, return_means = train(env, pgAgent, agentSim, 1, epochs=EPOCHS, PATH=(PATH+'.pt'), continuation=False, beta=BETA)
 
     torch.save({
         'Mode' : MODE,
@@ -261,5 +297,4 @@ if __name__ == "__main__":
 
     plot_returns(return_means, PATH = (PATH+'_plot.png'))
     ret, acts = evaluate(env, pgAgent, agentSim, n_games=1000, controlled_agent=CONTROLLED_AGENT, PATH=(PATH+'.pt'))
-    print(f"")
 

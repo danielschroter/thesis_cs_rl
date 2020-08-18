@@ -82,16 +82,18 @@ class PGAgent():
 
 
 # make loss function, whose gradient, for the right data is policy gradient
-    def compute_loss(self, obs, act, weights):
+    def compute_loss(self, obs, act, weights, n_traj):
         logp = self.get_policy(obs).log_prob(act)
-        return -(logp * weights).mean()
+        #return -(logp * weights).mean()
+        return -(sum(logp * weights)/n_traj)
 
-    def learn(self, obs, acts, weights):
+    def learn(self, obs, acts, weights, n_traj):
         # self.mlp.optimizer.zero_grad()
         self.optimizer.zero_grad()
         batch_loss = self.compute_loss(obs=T.as_tensor(obs, dtype=T.float32),
                                   act=T.as_tensor(acts, dtype=T.int32),
-                                  weights=T.as_tensor(weights, dtype=T.float32))
+                                  weights=T.as_tensor(weights, dtype=T.float32),
+                                       n_traj = n_traj)
 
         batch_loss.backward()
         #self.mlp.optimizer.step()

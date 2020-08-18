@@ -15,6 +15,7 @@ import gym
 
 def mlp(sizes, activation=nn.Tanh, output_activation=nn.Identity):
     layers = []
+ #   layers += [nn.LayerNorm(sizes[0])]
     for j in range(len(sizes) - 1):
         act = activation if j < len(sizes) - 2 else output_activation
         layers += [nn.Linear(sizes[j], sizes[j + 1], act())]
@@ -86,8 +87,11 @@ class PGAgent_cont():
     def get_policy(self, obs):
         sigma, mu = self.mlp.forward(obs)
         m = T.nn.Softplus()
-        sigma = m(sigma)
-        return T.distributions.Normal(mu, sigma)
+        #t = T.nn.Tanh()
+        #mu = t(mu)
+        #mu_ = mu*8+8
+        sigma_ = m(sigma)
+        return T.distributions.Normal(mu, sigma_)
 
     """ def get_policy(self, obs):
 
@@ -103,7 +107,7 @@ class PGAgent_cont():
         return action
 
 # make loss function, whose gradient, for the right data is policy gradient
-    def compute_loss(self, obs, act, weights):
+    def compute_loss(self, obs, act, weights, n_traj):
         """l = []
         for o,a,w in zip(obs,act,weights):
 
@@ -143,23 +147,35 @@ class PGAgent_cont():
         out = self.mlp.forward(obs)
         mu = out[:,1]
         sigma = out[:,0]
+        m = T.nn.Softplus()
+        sigma = m(sigma)
+
 
         # https://github.com/colinskow/move37/blob/master/actor_critic/a2c_continuous.py
         # https://medium.com/@vittoriolabarbera/continuous-control-with-a2c-and-gaussian-policies-mujoco-pytorch-and-c-4221ec8ba024
 
         p1 = -((mu - act)**2)/(2*((sigma**2).clamp(min=1e-3)))
         p2 = - T.log(T.sqrt(2*math.pi*(sigma**2)))
-        return -((p1+p2)*weights).mean()
+        logp = p1+p2
+        #p2 = - T.log(2*math.pi*(sigma))
+        return -((sum((p1+p2)*weights))/n_traj)
 
 
 
-    def learn(self, obs, acts, weights):
+    def learn(self, obs, acts, weights, n_traj):
+        obs = T.as_tensor(obs, dtype=T.float32)
+        act = T.as_tensor(acts, dtype=T.float32)
+        weights = T.as_tensor(weights, dtype=T.float32)
+        n_traj = T.as_tensor(n_traj, dtype=T.float32)
         self.optimizer.zero_grad()
-        batch_loss = self.compute_loss(obs=T.as_tensor(obs, dtype=T.float32),
-                                  act=T.as_tensor(acts, dtype=T.float32),
-                                  weights=T.as_tensor(weights, dtype=T.float32))
+        batch_loss = self.compute_loss(obs=obs,
+                                  act=act,
+                                  weights=weights,
+                                       n_traj = n_traj)
 
         batch_loss.backward()
+        clipping_value = 1
+        T.nn.utils.clip_grad_norm_(self.mlp.parameters(), clipping_value)
         self.optimizer.step()
         return batch_loss
 

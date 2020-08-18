@@ -1,6 +1,6 @@
 import unittest
 from beer_game.envs.bg_env import BeerGame
-from action_policies import AgentSimulator
+from action_policies import AgentSimulator, calculate_feedback, calculate_expectedReturn
 
 class TestBgEnv(unittest.TestCase):
 
@@ -32,6 +32,13 @@ class TestBgEnv(unittest.TestCase):
 
         self.assertEqual(total_cost, 1428.5)
 
+    def test_feedback_calculation(self):
+        feedback = calculate_feedback([[1, 2, 3, 4], [5, 6, 7, 8]], 1, 9)
+        self.assertListEqual(feedback, [44.0, 48.0])
+
+    def test_calc_exp_ret(self):
+        weights = calculate_expectedReturn([1,2,3,4,5], 0.5)
+        self.assertListEqual(weights, [3.5625, 5.125, 6.25, 6.5, 5.])
 
 if __name__=='__main__':
     unittest.main()

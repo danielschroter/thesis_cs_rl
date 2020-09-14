@@ -67,7 +67,7 @@ class CriticNetwork(nn.Module):
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
         self.n_actions = n_actions
-        self.checkpoint_file = os.path.join(chkpt_dir,name+'_ddpg')
+        self.checkpoint_file = os.path.join(chkpt_dir,name+'_uniform_ddpg_rand')
         self.fc1 = nn.Linear(*self.input_dims, self.fc1_dims)
         f1 = 1./np.sqrt(self.fc1.weight.data.size()[0])
         T.nn.init.uniform_(self.fc1.weight.data, -f1, f1)
@@ -127,7 +127,7 @@ class ActorNetwork(nn.Module):
         self.fc1_dims = fc1_dims
         self.fc2_dims = fc2_dims
         self.n_actions = n_actions
-        self.checkpoint_file = os.path.join(chkpt_dir,name+'_ddpg')
+        self.checkpoint_file = os.path.join(chkpt_dir,name+'_uniform_ddpg_rand')
         self.fc1 = nn.Linear(*self.input_dims, self.fc1_dims)
         f1 = 1./np.sqrt(self.fc1.weight.data.size()[0])
         T.nn.init.uniform_(self.fc1.weight.data, -f1, f1)
@@ -165,7 +165,7 @@ class ActorNetwork(nn.Module):
         x = self.fc2(x)
         x = self.bn2(x)
         x = F.relu(x)
-        x = T.tanh(self.mu(x))
+        x = self.mu(x)
 
         return x
 
@@ -204,16 +204,19 @@ class Agent(object):
 
         self.update_network_parameters(tau=1)
 
-    def choose_action(self, observation):
+    def get_action(self, observation, train = True):
         self.actor.eval()
         observation = T.tensor(observation, dtype=T.float).to(self.actor.device)
         mu = self.actor.forward(observation).to(self.actor.device)
-        mu_prime = mu + T.tensor(self.noise(),
+        if train:
+            mu_prime = mu + T.tensor(self.noise(),
                                  dtype=T.float).to(self.actor.device)
+        else:
+            mu_prime = mu
 
         # as we get tanh output we probably might want to scale action here ?
-        mu_prime = mu_prime.clamp(min=-1,max=1)
-        mu_prime = mu_prime*8 + 8
+        mu_prime = mu_prime.clamp(min=0, max=16)
+        #mu_prime = mu_prime*8 + 8
 
         self.actor.train()
         return mu_prime.cpu().detach().numpy()
@@ -255,7 +258,9 @@ class Agent(object):
 
         self.critic.eval()
         self.actor.optimizer.zero_grad()
+        ## Do i have to scale the mu similar to clipping, remove tanh
         mu = self.actor.forward(state)
+        #mu_prime = mu*8 + 8
         self.actor.train()
         actor_loss = -self.critic.forward(state, mu)
         actor_loss = T.mean(actor_loss)

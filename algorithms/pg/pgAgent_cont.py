@@ -154,18 +154,18 @@ class PGAgent_cont():
         # https://github.com/colinskow/move37/blob/master/actor_critic/a2c_continuous.py
         # https://medium.com/@vittoriolabarbera/continuous-control-with-a2c-and-gaussian-policies-mujoco-pytorch-and-c-4221ec8ba024
 
-        p1 = -((mu - act)**2)/(2*((sigma**2).clamp(min=1e-3)))
-        p2 = - T.log(T.sqrt(2*math.pi*(sigma**2)))
+        p1 = -((mu - act)**2)/(2*((sigma.clamp(min=1e-5)**2)))
+        p2 = - T.log(T.sqrt(2*math.pi*(sigma.clamp(min=1e-5)**2)))
         logp = p1+p2
         #p2 = - T.log(2*math.pi*(sigma))
         return -((sum((p1+p2)*weights))/n_traj)
-
 
 
     def learn(self, obs, acts, weights, n_traj):
         obs = T.as_tensor(obs, dtype=T.float32)
         act = T.as_tensor(acts, dtype=T.float32)
         weights = T.as_tensor(weights, dtype=T.float32)
+        weights = (weights - weights.min())/(weights.max()-weights.min())
         n_traj = T.as_tensor(n_traj, dtype=T.float32)
         self.optimizer.zero_grad()
         batch_loss = self.compute_loss(obs=obs,

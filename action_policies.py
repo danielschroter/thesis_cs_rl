@@ -86,7 +86,7 @@ class AgentSimulator():
 
             # Parameters and initial values
             mdt = [1 for i in range(n_agents - 1)]  # mailing delay time
-            sat = [1 for i in range(n_agents)]  # stock adjustment time (corrsp. to 1/alphas in Sterman 1989)
+            sat = [2 for i in range(n_agents)]  # stock adjustment time (corrsp. to 1/alphas in Sterman 1989)
             st = [2 for i in range(n_agents - 1)]  # shipment_time
             plt = 2  # production lead time
             dsl = [None] * n_agents
@@ -132,7 +132,6 @@ class AgentSimulator():
 
             # According to dqn paper using the mean for the desired inventory model. Better suits other demand ditr.
              # In A Matheatical Model of the Beer Game by Edali and Yasarcan the desired inventory is 0
-
             if original:
                 desired_inventory = [0]*n_agents
             else:
@@ -176,7 +175,6 @@ def calculate_feedback(rews_total, agent, beta = 10):
     for t in range(T):
         r_modified = (rews_total[t][agent] + (beta / 3) * (w - tau_i[agent]))
         feedback.append(r_modified)
-#    return feedback - np.mean(feedback)
     return feedback
 
 def total_feedback(rews_total, agent, beta = 10):
@@ -195,7 +193,6 @@ def total_feedback(rews_total, agent, beta = 10):
         for t in range(T):
             r_modified = (rews_total[t][j] + (beta / 3) * (w - tau_i[j]))
             feedback.append(r_modified)
-    #    return feedback - np.mean(feedback)
         fb.append(feedback)
     return fb
 

@@ -8,9 +8,10 @@ if __name__ == "__main__":
 
     N_TURNS_PER_GAME = 36
     DEMAND_DIST = "uniform_0_8"
-    POLICY_OTHERS = "random"
+    POLICY_OTHERS = "base_stock"
     CONTROLLED_AGENT = 1
-    POLICY_AGENT = "random"
+    POLICY_AGENT = "base_stock"
+    DISCRETE = True
     seed = 123
 
     random.seed(seed)
@@ -19,8 +20,8 @@ if __name__ == "__main__":
     env = BeerGame(demand_dist=DEMAND_DIST, n_observed_periods=1, n_turns_per_game=N_TURNS_PER_GAME)
     obs = env.reset()
     done = False
-    agent_sim_others = AgentSimulator(policy=POLICY_OTHERS)
-    agent_sim_agent = AgentSimulator(policy=POLICY_AGENT)
+    agent_sim_others = AgentSimulator(policy=POLICY_OTHERS, discrete=DISCRETE)
+    agent_sim_agent = AgentSimulator(policy=POLICY_AGENT, discrete=DISCRETE)
 
 
     returns = []

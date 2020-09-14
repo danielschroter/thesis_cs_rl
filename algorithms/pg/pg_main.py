@@ -34,6 +34,7 @@ def run_one_time(env, agent, agent_sim, batch_size = 5000, controlled_agent = 1,
     # reset episode specific variables
     obs_total = env.reset()
     obs = obs_total[controlled_agent].flatten()
+    obs = np.array(obs, dtype=np.float32)
     done = False
     ep_rews = []
     ep_rews_total = []
@@ -49,6 +50,7 @@ def run_one_time(env, agent, agent_sim, batch_size = 5000, controlled_agent = 1,
             act = agent.get_action(torch.as_tensor(obs, dtype=torch.float32))
         else:
             with torch.no_grad():
+                #act = agent.get_action(torch.as_tensor(obs, dtype=torch.float32), train=False)
                 act = agent.get_action(torch.as_tensor(obs, dtype=torch.float32))
 
         actions = agent_sim.get_other_actions(obs_total, env.demand_dist, env.turn, env.orders,
@@ -87,7 +89,8 @@ def run_one_time(env, agent, agent_sim, batch_size = 5000, controlled_agent = 1,
     # calculate batch_loss and take a single policy gradient update step
     if train:
         n_traj = len(batch_obs)/n_rounds
-        batch_loss = agent.learn(batch_obs, batch_acts, batch_weights, n_traj)
+        for _ in range(1):
+            batch_loss = agent.learn(batch_obs, batch_acts, batch_weights, n_traj)
         return batch_loss, batch_rets, batch_acts
 
     # return batch returns and batch actions if in evaluation mode
@@ -148,7 +151,7 @@ def train(env,agent, agent_sim, controlled_agent, epochs=1000, batch_size=5000,
               (i, batch_loss, np.mean(batch_rets)))
 
         # save regulary
-        if (i + 1) % 20 == 0:
+        if (i + 1) % 50 == 0:
             # PATH = "checkpoint.pt"
             torch.save({
                 'epoch': i,
@@ -195,9 +198,19 @@ def plot_returns(return_means, PATH):
     f = plt.figure(1)
     plt.plot(return_means)
     plt.xlabel('epochs')
-    plt.ylabel('mean cost of game during one epoch ')
+    plt.ylabel('mean cost per game')
+    plt.title('Cost reduction')
     f.show()
     f.savefig(PATH)
+
+def plot_action_means(action_means, PATH):
+    g = plt.figure(2)
+    plt.plot(action_means)
+    plt.xlabel('epochs')
+    plt.ylabel('mean order quantity per game')
+    plt.title('Mean of Orders')
+    g.show()
+    g.savefig(PATH)
 
 def grid_search(n_observed_preiods, discount, beta):
     LR = 1e-4
@@ -206,7 +219,7 @@ def grid_search(n_observed_preiods, discount, beta):
     POLICY_OTHERS = "sterman"
     DEMAND_DIST = "classical"
     HIDDEN_SIZES = [32, 32]
-    EPOCHS = 1200
+    EPOCHS = 1600
     ALGORITHM = "policy_gradient"
     MODE = 'discrete'
     DISCRETE=True
@@ -245,16 +258,16 @@ if __name__ == "__main__":
     LR = 1e-4
     CONTROLLED_AGENT = 1
     N_TURNS_PER_GAME = 36
-    POLICY_OTHERS = "sterman"
+    POLICY_OTHERS = "base_stock"
     DEMAND_DIST = "classical"
     HIDDEN_SIZES = [32, 32]
-    EPOCHS = 1200
+    EPOCHS = 1000
     ALGORITHM = "policy_gradient"
-    DISCRETE=False
+    DISCRETE=True
     MODE = "discrete" if DISCRETE else "continuous"
     BETA = 100
     beta = str(BETA)
-    seed = 111
+    seed = 0
     returns = []
     actions = []
     dir = os.path.dirname(__file__)
@@ -269,13 +282,15 @@ if __name__ == "__main__":
     env = BeerGame(demand_dist=DEMAND_DIST,  n_observed_periods=N_OBSERVED_PERIODS, n_turns_per_game=N_TURNS_PER_GAME, discrete=DISCRETE)
 
 
-    obs_dim = env.observation_space.shape[1]
-    n_acts = env.action_space.high[CONTROLLED_AGENT]
-    #n_acts = env.action_space.nvec[CONTROLLED_AGENT]
+    obs_dim = env.observation_space.shape[CONTROLLED_AGENT]
 
+    if DISCRETE:
+        n_acts = env.action_space.nvec[CONTROLLED_AGENT]
+        pgAgent = PGAgent(LR, sizes=[obs_dim] + HIDDEN_SIZES, n_actions=n_acts)
+    else:
+        n_acts = env.action_space.high[CONTROLLED_AGENT]
+        pgAgent = PGAgent_cont(LR, sizes=[obs_dim] + HIDDEN_SIZES, n_actions=2)
 
-    pgAgent = PGAgent_cont(LR, sizes=[obs_dim] + HIDDEN_SIZES, n_actions=2)
-    #pgAgent = PGAgent(LR, sizes=[obs_dim] + HIDDEN_SIZES, n_actions=n_acts)
     agentSim = AgentSimulator(policy=POLICY_OTHERS, discrete=DISCRETE)
     action_means, return_means = train(env, pgAgent, agentSim, 1, epochs=EPOCHS, PATH=(PATH+'.pt'), continuation=False, beta=BETA)
 
@@ -296,5 +311,7 @@ if __name__ == "__main__":
     }, (PATH + '_summary.pt'))
 
     plot_returns(return_means, PATH = (PATH+'_plot.png'))
+    plot_action_means(action_means, PATH = (PATH+'_action_mean_plot.png'))
     ret, acts = evaluate(env, pgAgent, agentSim, n_games=1000, controlled_agent=CONTROLLED_AGENT, PATH=(PATH+'.pt'))
+
 

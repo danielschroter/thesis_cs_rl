@@ -62,7 +62,6 @@ class PGAgent():
         self.optimizer = optim.Adam(self.mlp.parameters(), lr=alpha)
         self.log_probs = None
         self.controlled_agent = 1
-        self.policy_others = "sterman"
 
     def choose_action(self, obs):
         logits = self.mlp.forward(obs)
@@ -84,7 +83,6 @@ class PGAgent():
 # make loss function, whose gradient, for the right data is policy gradient
     def compute_loss(self, obs, act, weights, n_traj):
         logp = self.get_policy(obs).log_prob(act)
-        #return -(logp * weights).mean()
         return -(sum(logp * weights)/n_traj)
 
     def learn(self, obs, acts, weights, n_traj):
@@ -93,7 +91,8 @@ class PGAgent():
         batch_loss = self.compute_loss(obs=T.as_tensor(obs, dtype=T.float32),
                                   act=T.as_tensor(acts, dtype=T.int32),
                                   weights=T.as_tensor(weights, dtype=T.float32),
-                                       n_traj = n_traj)
+                                       n_traj = T.as_tensor(n_traj, dtype=T.float32)
+                                       )
 
         batch_loss.backward()
         #self.mlp.optimizer.step()

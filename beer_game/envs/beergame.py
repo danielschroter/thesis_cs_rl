@@ -49,7 +49,7 @@ def state_dict_to_array(states):
 class BeerGame(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, demand_dist = "classical", n_turns_per_game=40, n_discrete_actions=7,
+    def __init__(self, demand_dist = "classical", n_turns_per_game=40, action_space=7,
                  n_observed_periods=5, discrete=True):
         super().__init__()
         self.discrete = discrete
@@ -69,7 +69,7 @@ class BeerGame(gym.Env):
         self.turn = None
         self.done = True
         self.prev_states = None
-        self.n_discrete_actions = n_discrete_actions
+        self.n_discrete_actions = action_space
         self.n_agents = 4
         self.demand_dist = demand_dist
         self.n_observed_periods = n_observed_periods
@@ -100,12 +100,12 @@ class BeerGame(gym.Env):
         """
         self.action_space = None
         if self.discrete:
-            self.action_space = spaces.MultiDiscrete([16]*self.n_agents)
+            self.action_space = spaces.MultiDiscrete([action_space]*self.n_agents)
         else:
             if (demand_dist == "uniform_0_8"):
-                self.action_space = spaces.Box(low=0.0, high=8.0, dtype=np.float32, shape=(4,))
+                self.action_space = spaces.Box(low=0.0, high=action_space, dtype=np.float32, shape=(4,))
             else:
-                self.action_space = spaces.Box(low=0.0, high=30.0, dtype=np.float32, shape=(4,))
+                self.action_space = spaces.Box(low=0.0, high=action_space, dtype=np.float32, shape=(4,))
         """
         Observation space
         Num	Observation               Min             Max
@@ -114,7 +114,6 @@ class BeerGame(gym.Env):
         2	Arriving Order            -Inf            Inf
         3	Arriving Shipment         -Inf            Inf
         """
-
         self.observation_space = spaces.Box(low=-np.finfo(np.float32).max, high=np.finfo(np.float32).max,
                                             dtype=np.float32, shape=(4, 4*n_observed_periods))
 

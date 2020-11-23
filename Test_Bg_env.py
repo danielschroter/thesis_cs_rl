@@ -1,6 +1,7 @@
 import unittest
-from beer_game.envs.bg_env import BeerGame
-from action_policies import AgentSimulator, calculate_feedback, calculate_expectedReturn
+from beer_game.envs.beergame import BeerGame
+from Agent_Simulator import AgentSimulator
+from utils import calculate_feedback, calculate_expectedReturn
 
 class TestBgEnv(unittest.TestCase):
 
@@ -30,7 +31,7 @@ class TestBgEnv(unittest.TestCase):
             obs, rew, done, _ = env.step(actions)
         total_cost = sum(env.cum_holding_cost)+sum(env.cum_stockout_cost)
 
-        self.assertEqual(total_cost, 1428.5)
+        self.assertEqual(total_cost, 2049)
 
     def test_feedback_calculation(self):
         feedback = calculate_feedback([[1, 2, 3, 4], [5, 6, 7, 8]], 1, 9)

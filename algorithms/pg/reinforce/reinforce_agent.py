@@ -1,15 +1,7 @@
 import torch as T
 import torch.nn as nn
 from torch.distributions.categorical import Categorical
-import numpy as np
-from beer_game.envs.bg_env import BeerGame
-from action_policies import AgentSimulator
-from action_policies import calculate_feedback
-import pandas as pd
-import matplotlib.pyplot as plt
-import torch.nn.functional as F
 import torch.optim as optim
-import gym
 
 
 def mlp(sizes, activation=nn.Tanh, output_activation=nn.Identity):
@@ -50,7 +42,6 @@ class GenericNetwork(nn.Module):
             x = self.activation(layer(x))
         output = self.output_activation(self.out(x))
         return output
-
 
 model = GenericNetwork(sizes=[obs_dim] + hidden_sizes, out_size = n_acts)
 

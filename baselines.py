@@ -1,5 +1,5 @@
-from beer_game.envs.bg_env import BeerGame
-from action_policies import AgentSimulator
+from beer_game.envs.beergame import BeerGame
+from Agent_Simulator import AgentSimulator
 import numpy as np
 import random
 
@@ -17,7 +17,7 @@ if __name__ == "__main__":
     random.seed(seed)
     np.random.seed(seed)
 
-    env = BeerGame(demand_dist=DEMAND_DIST, n_observed_periods=1, n_turns_per_game=N_TURNS_PER_GAME)
+    env = BeerGame(demand_dist=DEMAND_DIST, discrete=DISCRETE, n_observed_periods=1, n_turns_per_game=N_TURNS_PER_GAME)
     obs = env.reset()
     done = False
     agent_sim_others = AgentSimulator(policy=POLICY_OTHERS, discrete=DISCRETE)

@@ -2,12 +2,6 @@ import torch as T
 import torch.nn as nn
 from torch.distributions.categorical import Categorical
 import numpy as np
-from beer_game.envs.bg_env import BeerGame
-from action_policies import AgentSimulator
-from action_policies import calculate_feedback
-import pandas as pd
-import matplotlib.pyplot as plt
-import torch.nn.functional as F
 import torch.optim as optim
 import math
 import gym

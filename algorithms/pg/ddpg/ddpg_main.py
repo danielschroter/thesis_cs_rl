@@ -1,19 +1,40 @@
-import gym
-import numpy as np
 import copy
-from algorithms.pg.ddpg_agent import Agent
-from algorithms.pg.utils import plotLearning
-from action_policies import calculate_feedback, total_feedback, AgentSimulator
-from beer_game.envs.bg_env_cont_2 import BeerGame
-from algorithms.pg.pg_main import *
+from algorithms.pg.ddpg.ddpg_agent import Agent
+from utils import plotLearning
+from utils import total_feedback
+from algorithms.pg.reinforce.reinforce_main import *
+from beer_game.envs.beergame import BeerGame
 import random
+
+
+def evaluate(env, agent, agent_sim, controlled_agent, n_games=50):
+    batch_actions = []
+    batch_returns = []
+    epoch = 0
+
+    start_state = env.reset()
+    #env.render()
+    done = False
+    agent.load_models()
+
+    for i in range(n_games):
+        ret, batch_acts = run_one_time(env, agent, agent_sim, controlled_agent=controlled_agent, mode="eval")
+        batch_actions.append(batch_acts)
+        batch_returns.append(ret[0])
+
+        print(f'epoch: {i} \t return: {ret} \t orders: {batch_acts}')
+
+    print(f'mean return of {n_games} games played is {(sum(batch_returns)/len(batch_returns))}')
+
+    return batch_returns, batch_actions
+
 
 N_OBSERVED_PERIODS = 10
 LR = 1e-4
 CONTROLLED_AGENT = 1
 N_TURNS_PER_GAME = 36
-POLICY_OTHERS = "random"
-DEMAND_DIST = "uniform_0_8"
+POLICY_OTHERS = "base_stock"
+DEMAND_DIST = "classical"
 HIDDEN_SIZES = [32, 32]
 EPOCHS = 1200
 ALGORITHM = "DDPG"
@@ -29,48 +50,17 @@ env = BeerGame(demand_dist=DEMAND_DIST, n_observed_periods=N_OBSERVED_PERIODS, n
                discrete=DISCRETE)
 agent_sim = AgentSimulator(policy=POLICY_OTHERS, discrete=DISCRETE)
 
-
 obs_dim = env.observation_space.shape[1]
 n_acts = 1 # for one action
 
 agent = Agent(alpha=0.000025, beta=0.00025, input_dims=[obs_dim], tau=0.001, env=env,
               batch_size=32, layer1_size=400, layer2_size=300, n_actions=n_acts)
-#agent.load_models()
+agent.load_models()
 
-def evaluate(env, agent, agent_sim, controlled_agent, PATH=None, n_games=50):
-    batch_actions = []
-    batch_returns = []
-    epoch = 0
-
-    start_state = env.reset()
-    #env.render()
-    done = False
-    agent.load_models()
-
-    """    if PATH:
-            checkpoint = torch.load(PATH)
-            agent.mlp.load_state_dict(checkpoint['model_state_dict'])
-        agent.mlp.eval()"""
-
-
-    for i in range(n_games):
-        ret, batch_acts = run_one_time(env, agent, agent_sim, controlled_agent=controlled_agent, mode="eval")
-        batch_actions.append(batch_acts)
-        batch_returns.append(ret[0])
-
-        print(f'epoch: {i} \t return: {ret} \t orders: {batch_acts}')
-
-    print(f'mean return of {n_games} games played is {(sum(batch_returns)/len(batch_returns))}')
-
-    return batch_returns, batch_actions
-
-
-
-# np.random.seed(0)
 
 controlled_agent = 1
 score_history = []
-for i in range(5001):
+for i in range(1500):
     done = False
     score = 0
     local_cost = 0
@@ -134,10 +124,10 @@ for i in range(5001):
           ' trailing 100 game average %.2f' % np.mean(score_history[-100:]))
     if i % 500 == 0:
         agent.save_models()
+
 import os
 dir = os.path.dirname(__file__)
-PATH = os.path.join(dir, 'tmp', 'ddpg', '_'+DEMAND_DIST+'_'+POLICY_OTHERS)
-filename = PATH+'_plot.png'
+PATH = os.path.join(dir, 'logs', '_'+DEMAND_DIST+'_'+POLICY_OTHERS)
 
 torch.save({
     'Mode' : MODE,
@@ -149,7 +139,9 @@ torch.save({
     'N_Observed_Periods' : N_OBSERVED_PERIODS,
     'score_history': score_history,
 }, (PATH + '_summary.pt'))
-plotLearning(score_history, filename, window=100)
+plotLearning(score_history, PATH+'_plot.png', window=100)
 
 evaluate(env, agent, agent_sim, n_games=1000, controlled_agent=CONTROLLED_AGENT)
+
+print("Done")
 
